@@ -24,6 +24,13 @@ pyflakes/custom_checkers/dummy_checker/messages.py
 pyflakes/custom_checkers/indentation_checker/__init__.py
 pyflakes/custom_checkers/indentation_checker/checker.py
 pyflakes/custom_checkers/indentation_checker/messages.py
+pyflakes/custom_checkers/__init__.py
+pyflakes/custom_checkers/dummy_checker/__init__.py
+pyflakes/custom_checkers/dummy_checker/checker.py
+pyflakes/custom_checkers/dummy_checker/messages.py
+pyflakes/custom_checkers/indentation_checker/__init__.py
+pyflakes/custom_checkers/indentation_checker/checker.py
+pyflakes/custom_checkers/indentation_checker/messages.py
 pyflakes/scripts/__init__.py
 pyflakes/scripts/pyflakes.py
 pyflakes/test/__init__.py

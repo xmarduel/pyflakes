@@ -6,9 +6,11 @@ import re
 import sys
 
 from termcolor import colored
+import colorama
 
 from pyflakes import messages
 
+colorama.init()
 
 class Reporter(object):
     """
