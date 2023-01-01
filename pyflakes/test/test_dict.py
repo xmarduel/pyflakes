@@ -14,12 +14,10 @@ from pyflakes.test.harness import TestCase, skipIf
 class Test(TestCase):
 
     def setUp(self):
-        #m.UnusedVariable.reporting = False
-        m.UnusedFunctionArgument.reporting = False
+       pass
         
     def tearDown(self):
-        #m.UnusedVariable.reporting = True
-        m.UnusedFunctionArgument.reporting = True
+        pass
         
     def test_duplicate_keys(self):
         self.flakes(

@@ -1,12 +1,11 @@
-Metadata-Version: 1.1
+Metadata-Version: 2.1
 Name: pyflakes
-Version: 2.1.1-XAM
+Version: 3.0.1-XM
 Summary: passive checker of Python programs
 Home-page: https://github.com/PyCQA/pyflakes
 Author: A lot of people
 Author-email: code-quality@python.org
 License: MIT
-Description: UNKNOWN
 Platform: UNKNOWN
 Classifier: Development Status :: 6 - Mature
 Classifier: Environment :: Console
@@ -17,3 +16,8 @@ Classifier: Programming Language :: Python :: 2
 Classifier: Programming Language :: Python :: 3
 Classifier: Topic :: Software Development
 Classifier: Topic :: Utilities
+License-File: LICENSE
+License-File: AUTHORS
+
+UNKNOWN
+

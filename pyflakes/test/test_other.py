@@ -16,12 +16,10 @@ from pyflakes.test.harness import TestCase, skip, skipIf
 class Test(TestCase):
     
     def setUp(self):
-        m.NoEffectStatement.reporting = False
-        m.UnusedFunctionArgument.reporting = False
+        pass
         
     def tearDowm(self):
-        m.NoEffectStatement.reporting = True
-        m.UnusedFunctionArgument.reporting = True
+        pass
         
     def test_duplicateArgs(self):
         self.flakes('def fu(bar, bar): pass', m.DuplicateArgument)

@@ -18,12 +18,10 @@ class Test(TestCase):
     """
     """
     def setUp(self):
-        m.UnusedVariable.reporting = False
-        m.UnusedFunctionArgument.reporting = False
+        pass
         
     def tearDown(self):
-        m.UnusedVariable.reporting = True
-        m.UnusedFunctionArgument.reporting = True
+        pass
         
     def test_global_declared_in_module_and_assigned_in_module(self):
         """

@@ -3,7 +3,7 @@ Provide the class Message and its subclasses.
 """
 
 
-class Message(object):
+class Message:
     message = ''
     message_args = ()
 
@@ -13,17 +13,16 @@ class Message(object):
     FATAL = 4
     
     ignoreHint = '' # for false message : annotate code
-    reporting = True # for unittests : disable temporary some messages
     severity = INFO
     
     def __init__(self, filename, loc):
         self.filename = filename
         self.lineno = loc.lineno
-        self.col = getattr(loc, 'col_offset', 0)
+        self.col = loc.col_offset
 
     def __str__(self):
-        return '%s:%s: %s' % (self.filename, self.lineno,
-                              self.message % self.message_args)
+        return '{}:{}:{}: {}'.format(self.filename, self.lineno, self.col+1,
+                                     self.message % self.message_args)
     
     @classmethod
     def lineWithIgnoreHint(cls, line, *args, **kwargs):
@@ -44,14 +43,6 @@ class UnusedImport(Message):
 
 class RedefinedWhileUnused(Message):
     message = 'redefinition of unused %r from line %r'
-
-    def __init__(self, filename, loc, name, orig_loc):
-        Message.__init__(self, filename, loc)
-        self.message_args = (name, orig_loc.lineno)
-
-
-class RedefinedInListComp(Message):
-    message = 'list comprehension redefines %r from line %r'
 
     def __init__(self, filename, loc, name, orig_loc):
         Message.__init__(self, filename, loc)
@@ -96,7 +87,7 @@ class UndefinedName(Message):
     ignoreHint = "pyflakes:ignore-msg#undefined name"
 
     severity = Message.ERROR
-    
+
     def __init__(self, filename, loc, name):
         Message.__init__(self, filename, loc)
         self.message_args = (name,)
@@ -116,7 +107,7 @@ class UndefinedExport(Message):
     message = '(E) undefined name %r in __all__'
 
     severity = Message.ERROR
-    
+
     def __init__(self, filename, loc, name):
         Message.__init__(self, filename, loc)
         self.message_args = (name,)
@@ -127,9 +118,9 @@ class UndefinedLocal(Message):
 
     default = 'defined in enclosing scope on line %r'
     builtin = 'defined as a builtin'
-    
+
     severity = Message.ERROR
-    
+
     def __init__(self, filename, loc, name, orig_loc):
         Message.__init__(self, filename, loc)
         if orig_loc is None:
@@ -144,7 +135,7 @@ class DuplicateArgument(Message):
     message = '(E) duplicate argument %r in function definition'
 
     severity = Message.ERROR
-    
+
     def __init__(self, filename, loc, name):
         Message.__init__(self, filename, loc)
         self.message_args = (name,)
@@ -191,19 +182,24 @@ class UnusedVariable(Message):
     message = 'local variable %r is assigned to but never used'
 
     ignoreHint = "pyflakes:ignore-msg#unused variable"
-    
+
     severity = Message.WARNING
-    
+
     def __init__(self, filename, loc, names):
         Message.__init__(self, filename, loc)
         self.message_args = (names,)
 
 
-class ReturnWithArgsInsideGenerator(Message):
+class UnusedAnnotation(Message):
     """
-    Indicates a return statement with arguments inside a generator.
+    Indicates that a variable has been explicitly annotated to but not actually
+    used.
     """
-    message = '\'return\' with argument inside generator'
+    message = 'local variable %r is annotated but never used'
+
+    def __init__(self, filename, loc, names):
+        Message.__init__(self, filename, loc)
+        self.message_args = (names,)
 
 
 class ReturnOutsideFunction(Message):
@@ -222,8 +218,6 @@ class YieldOutsideFunction(Message):
 
 # For whatever reason, Python gives different error messages for these two. We
 # match the Python error message exactly.
-
-
 class ContinueOutsideLoop(Message):
     """
     Indicates a continue statement outside of a while or for loop.
@@ -236,13 +230,6 @@ class BreakOutsideLoop(Message):
     Indicates a break statement outside of a while or for loop.
     """
     message = '\'break\' outside loop'
-
-
-class ContinueInFinally(Message):
-    """
-    Indicates a continue statement in a finally block in a while or for loop.
-    """
-    message = '\'continue\' not supported inside \'finally\' clause'
 
 
 class DefaultExceptNotLast(Message):
@@ -266,9 +253,16 @@ class TooManyExpressionsInStarredAssignment(Message):
     message = 'too many expressions in star-unpacking assignment'
 
 
+class IfTuple(Message):
+    """
+    Conditional test is a non-empty tuple literal, which are always True.
+    """
+    message = '\'if tuple literal\' is always true, perhaps remove accidental comma?'
+
+
 class AssertTuple(Message):
     """
-    Assertion test is a tuple, which are always True.
+    Assertion test is a non-empty tuple literal, which are always True.
     """
     message = 'assertion is always true, perhaps remove parentheses?'
 
@@ -281,24 +275,115 @@ class ForwardAnnotationSyntaxError(Message):
         self.message_args = (annotation,)
 
 
-class CommentAnnotationSyntaxError(Message):
-    message = 'syntax error in type comment %r'
-
-    def __init__(self, filename, loc, annotation):
-        Message.__init__(self, filename, loc)
-        self.message_args = (annotation,)
-
-
 class RaiseNotImplemented(Message):
     message = "'raise NotImplemented' should be 'raise NotImplementedError'"
 
 
 class InvalidPrintSyntax(Message):
     message = 'use of >> is invalid with print function'
-    
-        
-# 1.6.0.1 messages
 
+
+class IsLiteral(Message):
+    message = 'use ==/!= to compare constant literals (str, bytes, int, float, tuple)'
+
+
+class FStringMissingPlaceholders(Message):
+    message = 'f-string is missing placeholders'
+
+
+class StringDotFormatExtraPositionalArguments(Message):
+    message = "'...'.format(...) has unused arguments at position(s): %s"
+
+    def __init__(self, filename, loc, extra_positions):
+        Message.__init__(self, filename, loc)
+        self.message_args = (extra_positions,)
+
+
+class StringDotFormatExtraNamedArguments(Message):
+    message = "'...'.format(...) has unused named argument(s): %s"
+
+    def __init__(self, filename, loc, extra_keywords):
+        Message.__init__(self, filename, loc)
+        self.message_args = (extra_keywords,)
+
+
+class StringDotFormatMissingArgument(Message):
+    message = "'...'.format(...) is missing argument(s) for placeholder(s): %s"
+
+    def __init__(self, filename, loc, missing_arguments):
+        Message.__init__(self, filename, loc)
+        self.message_args = (missing_arguments,)
+
+
+class StringDotFormatMixingAutomatic(Message):
+    message = "'...'.format(...) mixes automatic and manual numbering"
+
+
+class StringDotFormatInvalidFormat(Message):
+    message = "'...'.format(...) has invalid format string: %s"
+
+    def __init__(self, filename, loc, error):
+        Message.__init__(self, filename, loc)
+        self.message_args = (error,)
+
+
+class PercentFormatInvalidFormat(Message):
+    message = "'...' %% ... has invalid format string: %s"
+
+    def __init__(self, filename, loc, error):
+        Message.__init__(self, filename, loc)
+        self.message_args = (error,)
+
+
+class PercentFormatMixedPositionalAndNamed(Message):
+    message = "'...' %% ... has mixed positional and named placeholders"
+
+
+class PercentFormatUnsupportedFormatCharacter(Message):
+    message = "'...' %% ... has unsupported format character %r"
+
+    def __init__(self, filename, loc, c):
+        Message.__init__(self, filename, loc)
+        self.message_args = (c,)
+
+
+class PercentFormatPositionalCountMismatch(Message):
+    message = "'...' %% ... has %d placeholder(s) but %d substitution(s)"
+
+    def __init__(self, filename, loc, n_placeholders, n_substitutions):
+        Message.__init__(self, filename, loc)
+        self.message_args = (n_placeholders, n_substitutions)
+
+
+class PercentFormatExtraNamedArguments(Message):
+    message = "'...' %% ... has unused named argument(s): %s"
+
+    def __init__(self, filename, loc, extra_keywords):
+        Message.__init__(self, filename, loc)
+        self.message_args = (extra_keywords,)
+
+
+class PercentFormatMissingArgument(Message):
+    message = "'...' %% ... is missing argument(s) for placeholder(s): %s"
+
+    def __init__(self, filename, loc, missing_arguments):
+        Message.__init__(self, filename, loc)
+        self.message_args = (missing_arguments,)
+
+
+class PercentFormatExpectedMapping(Message):
+    message = "'...' %% ... expected mapping but got sequence"
+
+
+class PercentFormatExpectedSequence(Message):
+    message = "'...' %% ... expected sequence but got mapping"
+
+
+class PercentFormatStarRequiresSequence(Message):
+    message = "'...' %% ... `*` specifier requires sequence"
+
+
+# 3.0.1_XM messages
 
 class UnusedFunctionArgument(Message):
     message = "function parameter %r not used"

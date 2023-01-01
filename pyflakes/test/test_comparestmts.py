@@ -9,12 +9,10 @@ from pyflakes.test.harness import TestCase
 
 class Test(TestCase):
     def setUp(self):
-        m.UnusedVariable.reporting = False
-        m.UnusedFunctionArgument.reporting = False
+        pass
 
     def tearDown(self):
-        m.UnusedVariable.reporting = True
-        m.UnusedFunctionArgument.reporting = True
+        pass
         
     #@skip("demonstrating skipping")
     def test_unusedCompare(self):

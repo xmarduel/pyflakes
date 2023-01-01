@@ -111,12 +111,10 @@ class TestImportationObject(TestCase):
 class Test(TestCase):
     
     def setUp(self):
-        m.NoEffectStatement.reporting = False
-        m.UnusedFunctionArgument.reporting = False
+        pass
         
     def tearDowm(self):
-        m.NoEffectStatement.reporting = True
-        m.UnusedFunctionArgument.reporting = True
+        pass
 
     def test_unusedImport(self):
         self.flakes('import fu, bar', m.UnusedImport, m.UnusedImport)

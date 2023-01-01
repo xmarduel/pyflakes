@@ -13,9 +13,6 @@ class Checker(object):
         '''
         self.messages = [] # init
         
-        if messages.BadIndentation.reporting == False:
-            return
-        
         self.checkindent(filename) # fill report of BadIndentation messages
 
     def checkindent(self, filename):
@@ -25,6 +22,7 @@ class Checker(object):
             # for PyFlakes Messages Compatibility
             def __init__(self, lineno):
                 self.lineno = lineno
+                self.col_offset = 0
             
         class StringReport(pycodestyle.StandardReport):
             '''

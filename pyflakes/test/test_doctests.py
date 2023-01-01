@@ -61,12 +61,10 @@ class Test(TestCase):
     withDoctest = True
     
     def setUp(self):
-        m.UnusedFunctionArgument.reporting = False
-        m.NoEffectStatement.reporting = False
+        pass
         
     def tearDown(self):
-        m.UnusedFunctionArgument.reporting = True
-        m.NoEffectStatement.reporting = True
+        pass
 
     def test_scope_class(self):
         """Check that a doctest is given a DoctestScope."""

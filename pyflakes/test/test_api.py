@@ -331,14 +331,7 @@ class TestReporter(TestCase):
 class CheckTests(TestCase):
     """
     Tests for L{check} and L{checkPath} which check a file for flakes.
-    """
-
-    def setUp(self):
-        indentation_checker_m.BadIndentation.reporting = False
-        
-    def tearDown(self):
-        indentation_checker_m.BadIndentation.reporting = True
-        
+    """ 
     def makeTempFile(self, content):
         """
         Make a temporary file containing C{content} and return a path to it.
@@ -695,13 +688,9 @@ class IntegrationTests(TestCase):
     def setUp(self):
         self.tempdir = tempfile.mkdtemp()
         self.tempfilepath = os.path.join(self.tempdir, 'temp')
-        
-        indentation_checker_m.BadIndentation.reporting = False
 
     def tearDown(self):
         shutil.rmtree(self.tempdir)
-        
-        indentation_checker_m.BadIndentation.reporting = True
 
     def getPyflakesBinary(self):
         """
