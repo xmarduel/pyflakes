@@ -2,18 +2,20 @@
 Provide the class Message and its subclasses.
 """
 
+from enum import Enum
 
 class Message:
     message = ''
     message_args = ()
 
-    INFO = 1
-    WARNING = 2
-    ERROR = 3
-    FATAL = 4
+    class ERROR_LEVEL(Enum):
+        INFO = 1
+        WARNING = 2
+        ERROR = 3
+        FATAL = 4
     
     ignoreHint = '' # for false message : annotate code
-    severity = INFO
+    severity = ERROR_LEVEL.INFO
     
     def __init__(self, filename, loc):
         self.filename = filename
@@ -86,7 +88,7 @@ class UndefinedName(Message):
 
     ignoreHint = "pyflakes:ignore-msg#undefined name"
 
-    severity = Message.ERROR
+    severity = Message.ERROR_LEVEL.ERROR
 
     def __init__(self, filename, loc, name):
         Message.__init__(self, filename, loc)
@@ -106,7 +108,7 @@ class DoctestSyntaxError(Message):
 class UndefinedExport(Message):
     message = '(E) undefined name %r in __all__'
 
-    severity = Message.ERROR
+    severity = Message.ERROR_LEVEL.ERROR
 
     def __init__(self, filename, loc, name):
         Message.__init__(self, filename, loc)
@@ -119,7 +121,7 @@ class UndefinedLocal(Message):
     default = 'defined in enclosing scope on line %r'
     builtin = 'defined as a builtin'
 
-    severity = Message.ERROR
+    severity = Message.ERROR_LEVEL.ERROR
 
     def __init__(self, filename, loc, name, orig_loc):
         Message.__init__(self, filename, loc)
@@ -134,7 +136,7 @@ class UndefinedLocal(Message):
 class DuplicateArgument(Message):
     message = '(E) duplicate argument %r in function definition'
 
-    severity = Message.ERROR
+    severity = Message.ERROR_LEVEL.ERROR
 
     def __init__(self, filename, loc, name):
         Message.__init__(self, filename, loc)
@@ -183,7 +185,7 @@ class UnusedVariable(Message):
 
     ignoreHint = "pyflakes:ignore-msg#unused variable"
 
-    severity = Message.WARNING
+    severity = Message.ERROR_LEVEL.WARNING
 
     def __init__(self, filename, loc, names):
         Message.__init__(self, filename, loc)

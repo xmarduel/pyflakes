@@ -2,10 +2,10 @@
 Pyflakes
 ========
 
-Fork of pyflakes to be used with my pycodechecker app and in Makefiles
- (return code optimized for Makefiles)
+pyflakes clone with messages categorized (ERROR, WARNING ...) for better filtering 
 
-Messages are categorized (ERROR, WARNING ...) for better filtering 
+Useful when calling pyflakes in Makefiles: the return code (%ERRORLEVEL%  on Windows)
+conts the ERROR, not the WARNINGS/INFOS
 
 
 ========

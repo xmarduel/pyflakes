@@ -579,7 +579,7 @@ class FunctionScope(Scope):
             if name in ['cls', 'self', 'evt', 'event']:
                 continue
             
-            if (not binding.used and name not in self.globals
+            if (not binding.used
                     and not self.usesLocals
                     and isinstance(binding, Argument)):
                 yield name, binding
@@ -757,6 +757,8 @@ class Checker:
         self.root = tree
 
         self.scopeStack = []
+        scope_tp = Checker._ast_node_scope[type(tree)]
+         
         # >>> xam - for ignoreHints
         if filename not in [ '(none)', 'package/__init__.py' ]:
             try:

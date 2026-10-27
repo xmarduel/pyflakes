@@ -67,8 +67,8 @@ def check(codeString, filename, reporter=None):
             reporter.flake(msg)
         
     # return code : number of errors -> good in Makefiles
-    return len([msg for msg in messages if msg.severity == msg.ERROR]) # only the real errors
-    return len(messages)
+    return len([msg for msg in messages if msg.severity == msg.ERROR_LEVEL.ERROR]) # only the real errors
+    #return len(messages)
     
 
 def getCustomCheckers():

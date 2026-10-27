@@ -87,13 +87,13 @@ class Reporter:
 
         @param: A L{pyflakes.messages.Message}.
         """
-        if message.severity == messages.Message.ERROR :
+        if message.severity == messages.Message.ERROR_LEVEL.ERROR :
             print(colored(str(message), 'red'))
-        elif message.severity == messages.Message.WARNING :
+        elif message.severity == messages.Message.ERROR_LEVEL.WARNING :
             print(colored(str(message), 'yellow'))
-        elif message.severity == messages.Message.INFO :
+        elif message.severity == messages.Message.ERROR_LEVEL.INFO :
             print(colored(str(message), 'blue'))
-        elif message.severity == messages.Message.FATAL :
+        elif message.severity == messages.Message.ERROR_LEVEL.FATAL :
             print(colored(str(message), 'cyan'))
         else:
             self._stdout.write(str(message))
