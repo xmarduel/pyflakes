@@ -2,3 +2,4 @@ build/
 dist/
 __pycache__
 pyflakes-3.0.1
+pyflakes-4.0.3

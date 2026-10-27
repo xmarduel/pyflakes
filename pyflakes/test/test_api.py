@@ -3,6 +3,7 @@ Tests for L{pyflakes.scripts.pyflakes}.
 """
 
 import contextlib
+import io
 import os
 import sys
 import shutil
@@ -15,36 +16,16 @@ import xmlrunner
 from pyflakes import messages as m
 from pyflakes.custom_checkers.indentation_checker import messages as indentation_checker_m
 
-from pyflakes.checker import PY2
 from pyflakes.messages import UnusedImport
 from pyflakes.reporter import Reporter
 from pyflakes.api import (
     main,
+    check,
     checkPath,
     checkRecursive,
     iterSourceCode,
 )
 from pyflakes.test.harness import TestCase, skipIf
-
-if sys.version_info < (3,):
-    from cStringIO import StringIO
-else:
-    from io import StringIO
-    unichr = chr
-
-try:
-    sys.pypy_version_info
-    PYPY = True
-except AttributeError:
-    PYPY = False
-
-try:
-    WindowsError
-    WIN = True
-except NameError:
-    WIN = False
-
-ERROR_HAS_COL_NUM = ERROR_HAS_LAST_LINE = sys.version_info >= (3, 2) or PYPY
 
 
 def withStderrTo(stderr, f, *args, **kwargs):
@@ -58,7 +39,7 @@ def withStderrTo(stderr, f, *args, **kwargs):
         sys.stderr = outer
 
 
-class Node(object):
+class Node:
     """
     Mock an AST node.
     """
@@ -67,32 +48,14 @@ class Node(object):
         self.col_offset = col_offset
 
 
-class SysStreamCapturing(object):
-
-    """
-    Context manager capturing sys.stdin, sys.stdout and sys.stderr.
+class SysStreamCapturing:
+    """Context manager capturing sys.stdin, sys.stdout and sys.stderr.
 
     The file handles are replaced with a StringIO object.
-    On environments that support it, the StringIO object uses newlines
-    set to os.linesep.  Otherwise newlines are converted from \\n to
-    os.linesep during __exit__.
     """
 
-    def _create_StringIO(self, buffer=None):
-        # Python 3 has a newline argument
-        try:
-            return StringIO(buffer, newline=os.linesep)
-        except TypeError:
-            self._newline = True
-            # Python 2 creates an input only stream when buffer is not None
-            if buffer is None:
-                return StringIO()
-            else:
-                return StringIO(buffer)
-
     def __init__(self, stdin):
-        self._newline = False
-        self._stdin = self._create_StringIO(stdin or '')
+        self._stdin = io.StringIO(stdin or '')
 
     def __enter__(self):
         self._orig_stdin = sys.stdin
@@ -100,8 +63,8 @@ class SysStreamCapturing(object):
         self._orig_stderr = sys.stderr
 
         sys.stdin = self._stdin
-        sys.stdout = self._stdout_stringio = self._create_StringIO()
-        sys.stderr = self._stderr_stringio = self._create_StringIO()
+        sys.stdout = self._stdout_stringio = io.StringIO()
+        sys.stderr = self._stderr_stringio = io.StringIO()
 
         return self
 
@@ -109,16 +72,12 @@ class SysStreamCapturing(object):
         self.output = self._stdout_stringio.getvalue()
         self.error = self._stderr_stringio.getvalue()
 
-        if self._newline and os.linesep != '\n':
-            self.output = self.output.replace('\n', os.linesep)
-            self.error = self.error.replace('\n', os.linesep)
-
         sys.stdin = self._orig_stdin
         sys.stdout = self._orig_stdout
         sys.stderr = self._orig_stderr
 
 
-class LoggingReporter(object):
+class LoggingReporter:
     """
     Implementation of Reporter that just appends any error to a list.
     """
@@ -138,7 +97,7 @@ class LoggingReporter(object):
         self.log.append(('unexpectedError', filename, message))
 
     def syntaxError(self, filename, msg, lineno, offset, line):
-        self.log.append(('syntaxError', filename, msg, lineno, offset, line))
+        raise AssertionError('unreachable')
 
 
 class TestIterSourceCode(TestCase):
@@ -208,10 +167,6 @@ class TestIterSourceCode(TestCase):
         with open(os.path.join(self.tempdir, 'c'), 'w') as fd:
             fd.write('hello\nworld\n')
 
-        python2 = os.path.join(self.tempdir, 'd')
-        with open(python2, 'w') as fd:
-            fd.write('#!/usr/bin/env python2\n')
-
         python3 = os.path.join(self.tempdir, 'e')
         with open(python3, 'w') as fd:
             fd.write('#!/usr/bin/env python3\n')
@@ -220,9 +175,29 @@ class TestIterSourceCode(TestCase):
         with open(pythonw, 'w') as fd:
             fd.write('#!/usr/bin/env pythonw\n')
 
+        python3args = os.path.join(self.tempdir, 'g')
+        with open(python3args, 'w') as fd:
+            fd.write('#!/usr/bin/python3 -u\n')
+
+        python3d = os.path.join(self.tempdir, 'i')
+        with open(python3d, 'w') as fd:
+            fd.write('#!/usr/local/bin/python3d\n')
+
+        python312t = os.path.join(self.tempdir, 'j')
+        with open(python312t, 'w') as fd:
+            fd.write('#! /usr/bin/env python3.12t\n')
+
+        # Should NOT be treated as Python source
+        notfirst = os.path.join(self.tempdir, 'l')
+        with open(notfirst, 'w') as fd:
+            fd.write('#!/bin/sh\n#!/usr/bin/python\n')
+
         self.assertEqual(
             sorted(iterSourceCode([self.tempdir])),
-            sorted([python, python2, python3, pythonw]))
+            sorted([
+                python, python3, pythonw, python3args, python3d,
+                python312t,
+            ]))
 
     def test_multipleDirectories(self):
         """
@@ -248,6 +223,11 @@ class TestIterSourceCode(TestCase):
         self.assertEqual(list(iterSourceCode([epath])),
                          [epath])
 
+    def test_skips_dead_symlink(self):
+        os.symlink('dead', os.path.join(self.tempdir, 'symlink'))
+        tpath = self.makeEmptyFile('t.py')
+        self.assertEqual(list(iterSourceCode([self.tempdir])), [tpath])
+
 
 class TestReporter(TestCase):
     """
@@ -261,11 +241,9 @@ class TestReporter(TestCase):
         number, error message, actual line of source and a caret pointing to
         where the error is.
         """
-        err = StringIO()
+        err = io.StringIO()
         reporter = Reporter(None, err)
-        reporter.syntaxError('foo.py', 'a problem', 3,
-                             8 if sys.version_info >= (3, 8) else 7,
-                             'bad line of source')
+        reporter.syntaxError('foo.py', 'a problem', 3, 8, 'bad line of source')
         self.assertEqual(
             ("foo.py:3:8: a problem\n"
              "bad line of source\n"
@@ -277,7 +255,7 @@ class TestReporter(TestCase):
         C{syntaxError} doesn't include a caret pointing to the error if
         C{offset} is passed as C{None}.
         """
-        err = StringIO()
+        err = io.StringIO()
         reporter = Reporter(None, err)
         reporter.syntaxError('foo.py', 'a problem', 3, None,
                              'bad line of source')
@@ -286,13 +264,24 @@ class TestReporter(TestCase):
              "bad line of source\n"),
             err.getvalue())
 
+    def test_syntaxErrorNoText(self):
+        """
+        C{syntaxError} doesn't include text or nonsensical offsets if C{text} is C{None}.
+
+        This typically happens when reporting syntax errors from stdin.
+        """
+        err = io.StringIO()
+        reporter = Reporter(None, err)
+        reporter.syntaxError('<stdin>', 'a problem', 0, 0, None)
+        self.assertEqual(("<stdin>:1:1: a problem\n"), err.getvalue())
+
     def test_multiLineSyntaxError(self):
         """
         If there's a multi-line syntax error, then we only report the last
         line.  The offset is adjusted so that it is relative to the start of
         the last line.
         """
-        err = StringIO()
+        err = io.StringIO()
         lines = [
             'bad line of source',
             'more bad lines of source',
@@ -300,18 +289,17 @@ class TestReporter(TestCase):
         reporter = Reporter(None, err)
         reporter.syntaxError('foo.py', 'a problem', 3, len(lines[0]) + 7,
                              '\n'.join(lines))
-        column = 25 if sys.version_info >= (3, 8) else 7
         self.assertEqual(
-            ("foo.py:3:%d: a problem\n" % column +
+            ("foo.py:3:25: a problem\n" +
              lines[-1] + "\n" +
-             " " * (column - 1) + "^\n"),
+             " " * 24 + "^\n"),
             err.getvalue())
 
     def test_unexpectedError(self):
         """
         C{unexpectedError} reports an error processing a source file.
         """
-        err = StringIO()
+        err = io.StringIO()
         reporter = Reporter(None, err)
         reporter.unexpectedError('source.py', 'error message')
         self.assertEqual('source.py: error message\n', err.getvalue())
@@ -321,17 +309,19 @@ class TestReporter(TestCase):
         C{flake} reports a code warning from Pyflakes.  It is exactly the
         str() of a L{pyflakes.messages.Message}.
         """
-        out = StringIO()
+        out = io.StringIO()
         reporter = Reporter(out, None)
         message = UnusedImport('foo.py', Node(42), 'bar')
         reporter.flake(message)
-        self.assertEqual(out.getvalue(), "%s\n" % (message,))
+        self.assertEqual(out.getvalue(), f"{message}\n")
 
 
 class CheckTests(TestCase):
     """
     Tests for L{check} and L{checkPath} which check a file for flakes.
-    """ 
+    """
+
+    @contextlib.contextmanager
     def makeTempFile(self, content):
         """
         Make a temporary file containing C{content} and return a path to it.
@@ -353,7 +343,7 @@ class CheckTests(TestCase):
         @param path: A path to a file to check.
         @param errorList: A list of errors expected to be printed to stderr.
         """
-        err = StringIO()
+        err = io.StringIO()
         count = withStderrTo(err, checkPath, path)
         self.assertEqual(
             (count, err.getvalue()), (len(errorList), ''.join(errorList)))
@@ -412,33 +402,14 @@ def baz():
     '''quux'''
 """
 
-        # Sanity check - SyntaxError.text should be multiple lines, if it
-        # isn't, something this test was unprepared for has happened.
-        def evaluate(source):
-            exec(source)
-        try:
-            evaluate(source)
-        except SyntaxError:
-            e = sys.exc_info()[1]
-            if not PYPY:
-                self.assertTrue(e.text.count('\n') > 1)
-        else:
-            self.fail()
-
         with self.makeTempFile(source) as sourcePath:
-            if PYPY:
-                message = 'EOF while scanning triple-quoted string literal'
-            else:
-                message = 'invalid syntax'
-
-            column = 8 if sys.version_info >= (3, 8) else 11
             self.assertHasErrors(
                 sourcePath,
-                ["""\
-%s:8:%d: %s
+                [f"""\
+{sourcePath}:8:12: unterminated triple-quoted string literal (detected at line 8)
     '''quux'''
-%s^
-""" % (sourcePath, column, message, ' ' * (column - 1))])
+           ^
+"""])
 
     def test_eofSyntaxError(self):
         """
@@ -446,22 +417,13 @@ def baz():
         syntax error reflects the cause for the syntax error.
         """
         with self.makeTempFile("def foo(") as sourcePath:
-            if PYPY:
-                result = """\
-%s:1:7: parenthesis is never closed
-def foo(
-      ^
-""" % (sourcePath,)
-            else:
-                result = """\
-%s:1:9: unexpected EOF while parsing
-def foo(
-        ^
-""" % (sourcePath,)
+            expected = (
+                f"{sourcePath}:1:8: '(' was never closed\n"
+                f'def foo(\n'
+                f'       ^\n'
+            )
 
-            self.assertHasErrors(
-                sourcePath,
-                [result])
+            self.assertHasErrors(sourcePath, [expected])
 
     def test_eofSyntaxErrorWithTab(self):
         """
@@ -469,16 +431,13 @@ def foo(
         syntax error reflects the cause for the syntax error.
         """
         with self.makeTempFile("if True:\n\tfoo =") as sourcePath:
-            column = 5 if PYPY else 7
-            last_line = '\t   ^' if PYPY else '\t     ^'
-
             self.assertHasErrors(
                 sourcePath,
-                ["""\
-%s:2:%s: invalid syntax
+                [f"""\
+{sourcePath}:2:7: invalid syntax
 \tfoo =
-%s
-""" % (sourcePath, column, last_line)])
+\t     ^
+"""])
 
     def test_nonDefaultFollowsDefaultSyntaxError(self):
         """
@@ -491,18 +450,18 @@ def foo(bar=baz, bax):
     pass
 """
         with self.makeTempFile(source) as sourcePath:
-            if ERROR_HAS_LAST_LINE:
-                column = 9 if sys.version_info >= (3, 8) else 8
-                last_line = ' ' * (column - 1) + '^\n'
-                columnstr = '%d:' % column
-            else:
-                last_line = columnstr = ''
+            if sys.version_info >= (3, 12):  # pragma: >=3.12 cover
+                msg = 'parameter without a default follows parameter with a default'  # noqa: E501
+            else:  # pragma: <3.12 cover
+                msg = 'non-default argument follows default argument'
+
             self.assertHasErrors(
                 sourcePath,
-                ["""\
-%s:1:%s non-default argument follows default argument
+                [f"""\
+{sourcePath}:1:18: {msg}
 def foo(bar=baz, bax):
-%s""" % (sourcePath, columnstr, last_line)])
+                 ^
+"""])
 
     def test_nonKeywordAfterKeywordSyntaxError(self):
         """
@@ -514,50 +473,31 @@ def foo(bar=baz, bax):
 foo(bar=baz, bax)
 """
         with self.makeTempFile(source) as sourcePath:
-            if ERROR_HAS_LAST_LINE:
-                column = 14 if sys.version_info >= (3, 8) else 13
-                last_line = ' ' * (column - 1) + '^\n'
-                columnstr = '%d:' % column
-            else:
-                last_line = columnstr = ''
-
-            if sys.version_info >= (3, 5):
-                message = 'positional argument follows keyword argument'
-            else:
-                message = 'non-keyword arg after keyword arg'
-
             self.assertHasErrors(
                 sourcePath,
-                ["""\
-%s:1:%s %s
+                [f"""\
+{sourcePath}:1:17: positional argument follows keyword argument
 foo(bar=baz, bax)
-%s""" % (sourcePath, columnstr, message, last_line)])
+                ^
+"""])
 
     def test_invalidEscape(self):
         """
         The invalid escape syntax raises ValueError in Python 2
         """
-        ver = sys.version_info
         # ValueError: invalid \x escape
         with self.makeTempFile(r"foo = '\xyz'") as sourcePath:
-            if ver < (3,):
-                decoding_error = "%s: problem decoding source\n" % (sourcePath,)
-            else:
-                position_end = 1
-                if PYPY:
-                    column = 6
-                else:
-                    column = 7
-                    # Column has been "fixed" since 3.2.4 and 3.3.1
-                    if ver < (3, 2, 4) or ver[:3] == (3, 3, 0):
-                        position_end = 2
+            position_end = 1
+            if PYPY:  # pragma: pypy cover
+                column = 7
+            elif sys.version_info < (3, 12):  # pragma: <3.12 cover  # pragma: pypy no cover  # noqa: E501
+                column = 13
+            else:  # pragma: >=3.12 cover  # pragma: pypy no cover
+                column = 7
 
-                if ERROR_HAS_LAST_LINE:
-                    last_line = '%s^\n' % (' ' * (column - 1))
-                else:
-                    last_line = ''
+            last_line = '%s^\n' % (' ' * (column - 1))
 
-                decoding_error = """\
+            decoding_error = """\
 %s:1:%d: (unicode error) 'unicodeescape' codec can't decode bytes \
 in position 0-%d: truncated \\xXX escape
 foo = '\\xyz'
@@ -567,12 +507,12 @@ foo = '\\xyz'
                 sourcePath, [decoding_error])
 
     @skipIf(sys.platform == 'win32', 'unsupported on Windows')
-    def test_permissionDenied(self):
+    def test_permissionDenied(self):  # pragma: win32 no cover
         """
         If the source file is not readable, this is reported on standard
         error.
         """
-        if os.getuid() == 0:
+        if os.getuid() == 0:  # pragma: no cover
             self.skipTest('root user can access all files regardless of '
                           'permissions')
         with self.makeTempFile('') as sourcePath:
@@ -598,7 +538,7 @@ foo = '\\xyz'
         """
         If source file declares the correct encoding, no error is reported.
         """
-        SNOWMAN = unichr(0x2603)
+        SNOWMAN = chr(0x2603)
         source = ("""\
 # coding: utf-8
 x = "%s"
@@ -618,40 +558,34 @@ x = "%s"
         If a source file contains bytes which cannot be decoded, this is
         reported on stderr.
         """
-        SNOWMAN = unichr(0x2603)
-        source = ("""\
+        source = """\
 # coding: ascii
-x = "%s"
-""" % SNOWMAN).encode('utf-8')
+x = "?"
+""".encode()
         with self.makeTempFile(source) as sourcePath:
-            if PYPY and sys.version_info < (3, ):
-                message = ('\'ascii\' codec can\'t decode byte 0xe2 '
-                           'in position 21: ordinal not in range(128)')
-                result = """\
-%s:0:0: %s
-x = "\xe2\x98\x83"
-        ^\n""" % (sourcePath, message)
-
-            else:
-                message = 'problem decoding source'
-                result = "%s: problem decoding source\n" % (sourcePath,)
-
+            if PYPY:  # pragma: pypy cover
+                col = ''
+                src = '# coding: ascii\n'
+            else:  # pragma: pypy no cover
+                col = '1:'
+                src = ''
             self.assertHasErrors(
-                sourcePath, [result])
+                sourcePath,
+                [f"{sourcePath}:1:{col} 'ascii' codec can't decode byte 0xe2 in position 21: ordinal not in range(128)\n{src}"])  # noqa: E501
 
     def test_misencodedFileUTF16(self):
         """
         If a source file contains bytes which cannot be decoded, this is
         reported on stderr.
         """
-        SNOWMAN = unichr(0x2603)
+        SNOWMAN = chr(0x2603)
         source = ("""\
 # coding: ascii
 x = "%s"
 """ % SNOWMAN).encode('utf-16')
         with self.makeTempFile(source) as sourcePath:
-            self.assertHasErrors(
-                sourcePath, ["%s: problem decoding source\n" % (sourcePath,)])
+            expected = f"{sourcePath}:1: source code string cannot contain null bytes\n"  # noqa: E501
+            self.assertHasErrors(sourcePath, [expected])
 
     def test_checkRecursive(self):
         """
@@ -663,10 +597,10 @@ x = "%s"
             os.mkdir(os.path.join(tempdir, 'foo'))
             file1 = os.path.join(tempdir, 'foo', 'bar.py')
             with open(file1, 'wb') as fd:
-                fd.write("import baz\n".encode('ascii'))
+                fd.write(b"import baz\n")
             file2 = os.path.join(tempdir, 'baz.py')
             with open(file2, 'wb') as fd:
-                fd.write("import contraband".encode('ascii'))
+                fd.write(b"import contraband")
             log = []
             reporter = LoggingReporter(log)
             warnings = checkRecursive([tempdir], reporter)
@@ -679,26 +613,41 @@ x = "%s"
         finally:
             shutil.rmtree(tempdir)
 
+    def test_stdinReportsErrors(self):
+        """
+        L{check} reports syntax errors from stdin
+        """
+        source = "max(1 for i in range(10), key=lambda x: x+1)\n"
+        err = io.StringIO()
+        count = withStderrTo(err, check, source, "<stdin>")
+        self.assertEqual(count, 1)
+        errlines = err.getvalue().split("\n")[:-1]
+
+        expected_error = [
+            "<stdin>:1:5: Generator expression must be parenthesized",
+            "max(1 for i in range(10), key=lambda x: x+1)",
+            "    ^",
+        ]
+        self.assertEqual(errlines, expected_error)
+
+    def test_check_unknown_error(self):
+        err = io.StringIO()
+        count = withStderrTo(err, check, None, '<stdin>')
+        self.assertEqual(count, 1)
+        # XXX: this hides the actual error -- probably should just let it raise?
+        self.assertEqual(err.getvalue(), '<stdin>: problem decoding source\n')
+
 
 class IntegrationTests(TestCase):
     """
     Tests of the pyflakes script that actually spawn the script.
     """
-
     def setUp(self):
         self.tempdir = tempfile.mkdtemp()
         self.tempfilepath = os.path.join(self.tempdir, 'temp')
 
     def tearDown(self):
         shutil.rmtree(self.tempdir)
-
-    def getPyflakesBinary(self):
-        """
-        Return the path to the pyflakes binary.
-        """
-        import pyflakes
-        package_dir = os.path.dirname(pyflakes.__file__)
-        return os.path.join(package_dir, '..', 'bin', 'pyflakes')
 
     def runPyflakes(self, paths, stdin=None):
         """
@@ -709,26 +658,9 @@ class IntegrationTests(TestCase):
         @return: C{(returncode, stdout, stderr)} of the completed pyflakes
             process.
         """
-        env = dict(os.environ)
-        env['PYTHONPATH'] = os.pathsep.join(sys.path)
-        command = [sys.executable, self.getPyflakesBinary()]
-        command.extend(paths)
-        if stdin:
-            p = subprocess.Popen(command, env=env, stdin=subprocess.PIPE,
-                                 stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-            (stdout, stderr) = p.communicate(stdin.encode('ascii'))
-        else:
-            p = subprocess.Popen(command, env=env,
-                                 stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-            (stdout, stderr) = p.communicate()
-        rv = p.wait()
-        if sys.version_info >= (3,):
-            stdout = stdout.decode('utf-8')
-            stderr = stderr.decode('utf-8')
-        # Workaround https://bitbucket.org/pypy/pypy/issues/2350
-        if PYPY and PY2 and WIN:
-            stderr = stderr.replace('\r\r\n', '\r\n')
-        return (stdout, stderr, rv)
+        command = [sys.executable, '-mpyflakes', *paths]
+        p = subprocess.run(command, capture_output=True, text=True, input=stdin)
+        return (p.stdout, p.stderr, p.returncode)
 
     def test_goodFile(self):
         """
@@ -745,10 +677,10 @@ class IntegrationTests(TestCase):
         and the warnings are printed to stdout.
         """
         with open(self.tempfilepath, 'wb') as fd:
-            fd.write("import contraband\n".encode('ascii'))
+            fd.write(b"import contraband\n")
         d = self.runPyflakes([self.tempfilepath])
         expected = UnusedImport(self.tempfilepath, Node(1), 'contraband')
-        self.assertEqual(d, ("%s%s" % (expected, os.linesep), '', 1))
+        self.assertEqual(d, (f"{expected}\n", '', 1))
 
     def test_errors_io(self):
         """
@@ -757,8 +689,7 @@ class IntegrationTests(TestCase):
         printed to stderr.
         """
         d = self.runPyflakes([self.tempfilepath])
-        error_msg = '%s: No such file or directory%s' % (self.tempfilepath,
-                                                         os.linesep)
+        error_msg = f'{self.tempfilepath}: No such file or directory\n'
         self.assertEqual(d, ('', error_msg, 1))
 
     def test_errors_syntax(self):
@@ -768,10 +699,15 @@ class IntegrationTests(TestCase):
         printed to stderr.
         """
         with open(self.tempfilepath, 'wb') as fd:
-            fd.write("import".encode('ascii'))
+            fd.write(b"import")
         d = self.runPyflakes([self.tempfilepath])
-        error_msg = '{0}:1:{2}: invalid syntax{1}import{1}    {3}^{1}'.format(
-            self.tempfilepath, os.linesep, 5 if PYPY else 7, '' if PYPY else '  ')
+
+        if sys.version_info >= (3, 13):  # pragma: >=3.13 cover
+            message = "Expected one or more names after 'import'"
+        else:  # pragma: <3.13 cover
+            message = 'invalid syntax'
+
+        error_msg = f'{self.tempfilepath}:1:7: {message}\nimport\n      ^\n'
         self.assertEqual(d, ('', error_msg, 1))
 
     def test_readFromStdin(self):
@@ -780,29 +716,20 @@ class IntegrationTests(TestCase):
         """
         d = self.runPyflakes([], stdin='import contraband')
         expected = UnusedImport('<stdin>', Node(1), 'contraband')
-        self.assertEqual(d, ("%s%s" % (expected, os.linesep), '', 1))
+        self.assertEqual(d, (f"{expected}\n", '', 1))
 
 
 class TestMain(IntegrationTests):
     """
     Tests of the pyflakes main function.
     """
-
     def runPyflakes(self, paths, stdin=None):
-        try:
-            with SysStreamCapturing(stdin) as capture:
-                main(args=paths)
-        except SystemExit as e:
-            self.assertIsInstance(e.code, bool)
-            rv = int(e.code)
-            return (capture.output, capture.error, rv)
-        else:
-            raise RuntimeError('SystemExit not raised')
+        with (
+                self.assertRaises(SystemExit) as excinfo,
+                SysStreamCapturing(stdin) as capture,
+        ):
+            main(args=paths)
 
-
-if __name__ == '__main__':
-    if os.environ.get('PMF_XMLRUNNER_UNITTESTS', None) == "YES":
-        unittest.main(testRunner=xmlrunner.XMLTestRunner(path='test-results', indic="test_api"))
-    else:
-        unittest.main()
-
+        self.assertIsInstance(excinfo.exception.code, bool)
+        rv = int(excinfo.exception.code)
+        return (capture.output, capture.error, rv)

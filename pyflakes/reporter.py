@@ -62,8 +62,9 @@ class Reporter:
         else:
             line = text.splitlines()[-1]
 
+        # lineno might be None if the error was during tokenization
         # lineno might be 0 if the error came from stdin
-        lineno = max(lineno, 1)
+        lineno = max(lineno or 0, 1)
 
         if offset is not None:
             # some versions of python emit an offset of -1 for certain encoding errors
@@ -72,13 +73,13 @@ class Reporter:
                                (filename, lineno, offset, msg))
         else:
             self._stderr.write('%s:%d: %s\n' % (filename, lineno, msg))
-        
+
         if line is not None:
             self._stderr.write(line)
             self._stderr.write('\n')
             if offset is not None:
                 self._stderr.write(re.sub(r'\S', ' ', line[:offset - 1]) +
-                               "^\n")
+                                   "^\n")
 
     def flake(self, message):
         """

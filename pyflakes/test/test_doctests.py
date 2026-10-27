@@ -1,13 +1,8 @@
-
-import os
-import sys
 import textwrap
-
-import unittest
-import xmlrunner
 
 from pyflakes import messages as m
 from pyflakes.checker import (
+    PYPY,
     DoctestScope,
     FunctionScope,
     ModuleScope,
@@ -17,14 +12,8 @@ from pyflakes.test.test_imports import Test as TestImports
 from pyflakes.test.test_undefined_names import Test as TestUndefinedNames
 from pyflakes.test.harness import TestCase, skip
 
-try:
-    sys.pypy_version_info
-    PYPY = True
-except AttributeError:
-    PYPY = False
 
-
-class _DoctestMixin(object):
+class _DoctestMixin:
 
     withDoctest = True
 
@@ -53,18 +42,12 @@ class _DoctestMixin(object):
         return doctestificator % "\n       ".join(lines)
 
     def flakes(self, input, *args, **kw):
-        return super(_DoctestMixin, self).flakes(self.doctestify(input), *args, **kw)
+        return super().flakes(self.doctestify(input), *args, **kw)
 
 
 class Test(TestCase):
 
     withDoctest = True
-    
-    def setUp(self):
-        pass
-        
-    def tearDown(self):
-        pass
 
     def test_scope_class(self):
         """Check that a doctest is given a DoctestScope."""
@@ -339,9 +322,9 @@ class Test(TestCase):
             m.DoctestSyntaxError).messages
         exc = exceptions[0]
         self.assertEqual(exc.lineno, 4)
-        if sys.version_info >= (3, 8):
+        if not PYPY:  # pragma: pypy no cover
             self.assertEqual(exc.col, 18)
-        else:
+        else:  # pragma: pypy cover
             self.assertEqual(exc.col, 26)
 
         # PyPy error column offset is 0,
@@ -349,16 +332,13 @@ class Test(TestCase):
         # i.e. at the beginning of the line
         exc = exceptions[1]
         self.assertEqual(exc.lineno, 5)
-        if PYPY:
+        if PYPY:  # pragma: pypy cover
             self.assertEqual(exc.col, 13)
-        else:
+        else:  # pragma: pypy no cover
             self.assertEqual(exc.col, 16)
         exc = exceptions[2]
         self.assertEqual(exc.lineno, 6)
-        if PYPY or sys.version_info >= (3, 8):
-            self.assertEqual(exc.col, 13)
-        else:
-            self.assertEqual(exc.col, 18)
+        self.assertEqual(exc.col, 13)
 
     def test_indentationErrorInDoctest(self):
         exc = self.flakes('''
@@ -369,10 +349,7 @@ class Test(TestCase):
             """
         ''', m.DoctestSyntaxError).messages[0]
         self.assertEqual(exc.lineno, 5)
-        if PYPY or sys.version_info >= (3, 8):
-            self.assertEqual(exc.col, 13)
-        else:
-            self.assertEqual(exc.col, 16)
+        self.assertEqual(exc.col, 13)
 
     def test_offsetWithMultiLineArgs(self):
         (exc1, exc2) = self.flakes(
@@ -444,6 +421,28 @@ class Test(TestCase):
             return 1
         ''')
 
+    def test_globalUnderscoreInDoctest(self):
+        self.flakes("""
+        from gettext import ugettext as _
+
+        def doctest_stuff():
+            '''
+                >>> pass
+            '''
+        """, m.UnusedImport)
+
+    def test_malformed_doctest_ignored(self):
+        self.flakes("""
+        def f():
+            '''my docstring
+
+            >>> hello
+             ...
+              ...
+               >>> world
+            '''
+        """)
+
 
 class TestOther(_DoctestMixin, TestOther):
     """Run TestOther with each test wrapped in a doctest."""
@@ -455,10 +454,3 @@ class TestImports(_DoctestMixin, TestImports):
 
 class TestUndefinedNames(_DoctestMixin, TestUndefinedNames):
     """Run TestUndefinedNames with each test wrapped in a doctest."""
-
-
-if __name__ == '__main__':
-    if os.environ.get('PMF_XMLRUNNER_UNITTESTS', None) == "YES":
-        unittest.main(testRunner=xmlrunner.XMLTestRunner(path='test-results', indic="test_doctests"))
-    else:
-        unittest.main()

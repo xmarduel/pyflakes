@@ -169,7 +169,7 @@ class FutureFeatureNotDefined(Message):
     """An undefined __future__ feature name was imported."""
     message = 'future feature %s is not defined'
 
-    def __init__(self, filename, loc, name):
+    def __init__(self, filename, loc, name):  # pragma: <3.14 cover
         Message.__init__(self, filename, loc)
         self.message_args = (name,)
 
@@ -200,6 +200,15 @@ class UnusedAnnotation(Message):
     def __init__(self, filename, loc, names):
         Message.__init__(self, filename, loc)
         self.message_args = (names,)
+
+
+class UnusedIndirectAssignment(Message):
+    """A `global` or `nonlocal` statement where the name is never reassigned"""
+    message = '`%s %s` is unused: name is never assigned in scope'
+
+    def __init__(self, filename, loc, name):
+        Message.__init__(self, filename, loc)
+        self.message_args = (type(loc).__name__.lower(), name)
 
 
 class ReturnOutsideFunction(Message):
@@ -289,6 +298,10 @@ class IsLiteral(Message):
 
 class FStringMissingPlaceholders(Message):
     message = 'f-string is missing placeholders'
+
+
+class TStringMissingPlaceholders(Message):
+    message = 't-string is missing placeholders'
 
 
 class StringDotFormatExtraPositionalArguments(Message):
@@ -382,6 +395,26 @@ class PercentFormatExpectedSequence(Message):
 class PercentFormatStarRequiresSequence(Message):
     message = "'...' %% ... `*` specifier requires sequence"
 
+
+class EagerUseOfLazyImport(Message):
+    message = 'eager use of lazily imported %r from line %r'
+
+    def __init__(self, filename, loc, name, orig_loc):  # pragma: >=3.15 cover
+        Message.__init__(self, filename, loc)
+        self.message_args = (name, orig_loc.lineno)
+
+
+class LazyImportStarNotPermitted(Message):
+    message = "'lazy from %s import *' is not allowed"
+
+    def __init__(self, filename, loc, modname):  # pragma: >=3.15 cover
+        Message.__init__(self, filename, loc)
+        self.message_args = (modname,)
+
+
+class LazyImportNotAtModuleScope(Message):
+    message = 'lazy import must be at module scope'
+    
 
 # 3.0.1_XM messages
 
